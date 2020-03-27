@@ -876,7 +876,7 @@ drop tables t1;
 --echo #
 --echo # MDEV-17554 Auto-create new partition for system versioned tables with history partitioned by INTERVAL/LIMIT
 --echo #
-
+--enable_info
 --error ER_PART_WRONG_VALUE
 create or replace table t1 (x int) with system versioning
 partition by system_time limit 999 auto_increment;
@@ -1067,6 +1067,7 @@ update t1 set x= x + 8;
 --replace_result $default_engine DEFAULT_ENGINE
 show create table t1;
 }
+--disable_info
 
 --echo # Concurrent DML
 set timestamp= unix_timestamp('2000-01-01 00:00:00');

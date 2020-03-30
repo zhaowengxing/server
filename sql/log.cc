@@ -3404,7 +3404,7 @@ MYSQL_BIN_LOG::MYSQL_BIN_LOG(uint *sync_period)
   bzero((char*) &index_file, sizeof(index_file));
   bzero((char*) &purge_index_file, sizeof(purge_index_file));
   /* non-zero is a marker to conduct xa recovery and related cleanup */
-  xa_recover_list.records= 0;
+  xa_recover_list.records= xa_recover_htons= 0;
 }
 
 void MYSQL_BIN_LOG::stop_background_thread()
@@ -9727,7 +9727,7 @@ int TC_LOG_MMAP::recover()
         goto err2; // OOM
   }
 
-  if (ha_recover(&xids, 0))
+  if (ha_recover(&xids, 0, NULL))
     goto err2;
 
   my_hash_free(&xids);
@@ -9768,7 +9768,7 @@ int TC_LOG::using_heuristic_recover()
     return 0;
 
   sql_print_information("Heuristic crash recovery mode");
-  if (ha_recover(0, 0))
+  if (ha_recover(0, 0, NULL))
     sql_print_error("Heuristic crash recovery failed");
   sql_print_information("Please restart mysqld without --tc-heuristic-recover");
   return 1;
@@ -10036,7 +10036,7 @@ int TC_LOG_BINLOG::unlog_xa_prepare(THD *thd, bool all)
   if (!cache_mngr->need_unlog)
   {
     Ha_trx_info *ha_info;
-    uint rw_count= ha_count_rw_all(thd, &ha_info);
+    uint rw_count= ha_count_rw_all(thd, &ha_info, false);
     bool rc= false;
 
     if (rw_count > 0)
@@ -10249,6 +10249,7 @@ start_binlog_background_thread()
   return 0;
 }
 
+#ifdef HAVE_REPLICATION
 /**
   Auxiliary function for ::recover().
   @returns a successfully created and inserted @c xa_recovery_member
@@ -10266,7 +10267,7 @@ xa_member_insert(HASH *hash_arg, xid_t *xid_arg, xa_binlog_state state_arg,
 
   member->xid.set(xid_arg);
   member->state= state_arg;
-  member->in_engine_prepare= false;
+  member->in_engine_prepare= 0;
   return my_hash_insert(hash_arg, (uchar*) member) ? NULL : member;
 }
 
@@ -10302,6 +10303,7 @@ static bool xa_member_replace(HASH *hash_arg, xid_t *xid_arg, bool is_prepare,
   }
   return false;
 }
+#endif
 
 extern "C" uchar *xid_get_var_key(xid_t *entry, size_t *length,
                               my_bool not_used __attribute__((unused)))
@@ -10559,7 +10561,7 @@ int TC_LOG_BINLOG::recover(LOG_INFO *linfo, const char *last_log_name,
 
   if (do_xa)
   {
-    if (ha_recover(&xids, &xa_recover_list))
+    if (ha_recover(&xids, &xa_recover_list, &xa_recover_htons))
       goto err2;
 
     DBUG_ASSERT(!xa_recover_list.records ||
@@ -10700,6 +10702,7 @@ bool MYSQL_BIN_LOG::recover_explicit_xa_prepare()
       if (typ == GTID_EVENT)
       {
         Gtid_log_event *gev= (Gtid_log_event *)ev;
+
         if (gev->flags2 &
             (Gtid_log_event::FL_PREPARED_XA | Gtid_log_event::FL_COMPLETED_XA))
         {
@@ -10717,9 +10720,17 @@ bool MYSQL_BIN_LOG::recover_explicit_xa_prepare()
             {
               if (member->state == XA_PREPARE)
               {
-                // XA is prepared in binlog and not present in engine then apply
-                if (member->in_engine_prepare == false)
+                // XA prepared is not present in (some) engine then apply
+                if (member->in_engine_prepare == 0)
                   enable_apply_event= true;
+                else if (gev->flags2 & Gtid_log_event::FL_MULTI_ENGINE_XA &&
+                         xa_recover_htons > member->in_engine_prepare)
+                {
+                  enable_apply_event= true;
+                  // partially engine-prepared XA is cleaned out prior replay
+                  thd->lex->sql_command= SQLCOM_XA_ROLLBACK;
+                  ha_commit_or_rollback_by_xid(&gev->xid, 0);
+                }
                 else
                   --recover_xa_count;
               }
@@ -10727,7 +10738,7 @@ bool MYSQL_BIN_LOG::recover_explicit_xa_prepare()
             else if (gev->flags2 & Gtid_log_event::FL_COMPLETED_XA)
             {
               if (member->state == XA_COMPLETE &&
-                  member->in_engine_prepare == true)
+                  member->in_engine_prepare > 0)
                 enable_apply_event= true;
               else
                 --recover_xa_count;

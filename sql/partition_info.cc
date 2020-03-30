@@ -1018,9 +1018,10 @@ void vers_add_auto_parts(THD *thd)
     if (make_partition_name(part_name, suffix))
     {
 vers_make_name_err:
-      sql_print_warning("Auto-increment history partition: "
-                        "name generation failed for suffix %d",
-                        suffix);
+      push_warning_printf(thd, Sql_condition::WARN_LEVEL_WARN,
+                          WARN_VERS_HIST_PART_ERROR,
+                          "Auto-increment history partition: "
+                          "name generation failed for suffix %d", suffix);
       my_error(WARN_VERS_HIST_PART_ERROR, MYF(ME_WARNING),
               table->s->db.str, table->s->table_name.str, 0);
       goto exit;
@@ -1044,8 +1045,10 @@ vers_make_name_err:
     if (part_info->set_up_defaults_for_partitioning(thd, table->file,
                                                     NULL, suffix + 1))
     {
-      sql_print_warning("Auto-increment history partition: "
-                        "setting up defaults failed");
+      push_warning(thd, Sql_condition::WARN_LEVEL_WARN,
+                   WARN_VERS_HIST_PART_ERROR,
+                   "Auto-increment history partition: "
+                   "setting up defaults failed");
       goto exit;
     }
     bool partition_changed= false;
@@ -1053,14 +1056,16 @@ vers_make_name_err:
     if (prep_alter_part_table(thd, table, &alter_info, &create_info,
                               &partition_changed, &fast_alter_partition))
     {
-      sql_print_warning("Auto-increment history partition: "
-                        "alter partitition prepare failed");
+      push_warning(thd, Sql_condition::WARN_LEVEL_WARN, WARN_VERS_HIST_PART_ERROR,
+                   "Auto-increment history partition: "
+                   "alter partitition prepare failed");
       goto exit;
     }
     if (!fast_alter_partition)
     {
-      sql_print_warning("Auto-increment history partition: "
-                        "fast alter partitition is not possible");
+      push_warning(thd, Sql_condition::WARN_LEVEL_WARN, WARN_VERS_HIST_PART_ERROR,
+                   "Auto-increment history partition: "
+                   "fast alter partitition is not possible");
       my_error(WARN_VERS_HIST_PART_ERROR, MYF(ME_WARNING),
                table->s->db.str, table->s->table_name.str, 0);
       goto exit;
@@ -1069,17 +1074,20 @@ vers_make_name_err:
     if (mysql_prepare_alter_table(thd, table, &create_info, &alter_info,
                                   &alter_ctx))
     {
-      sql_print_warning("Auto-increment history partition: "
-                        "alter prepare failed");
+      push_warning(thd, Sql_condition::WARN_LEVEL_WARN, WARN_VERS_HIST_PART_ERROR,
+                   "Auto-increment history partition: "
+                   "alter prepare failed");
       goto exit;
     }
 
     if (fast_alter_partition_table(thd, table, &alter_info, &create_info,
                                    tl, &table->s->db, &table->s->table_name))
     {
-      sql_print_warning("Auto-increment history partition: "
-                        "alter partition table failed");
-      goto exit;
+      push_warning(thd, Sql_condition::WARN_LEVEL_WARN, WARN_VERS_HIST_PART_ERROR,
+                   "Auto-increment history partition: "
+                   "alter partition table failed");
+      my_error(WARN_VERS_HIST_PART_ERROR, MYF(ME_WARNING),
+               tl->db.str, tl->table_name.str, 0);
     }
   }
 

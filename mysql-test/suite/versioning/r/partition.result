@@ -1631,3 +1631,22 @@ t1	CREATE TABLE `t1` (
  PARTITION BY SYSTEM_TIME INTERVAL 1 HOUR STARTS TIMESTAMP'2000-01-01 00:00:00' AUTO_INCREMENT
 PARTITIONS 4
 drop tables t1;
+create or replace table t1 (x int) with system versioning engine innodb
+partition by system_time interval 1 hour auto;
+start transaction;
+select * from t1;
+x
+connect con1, localhost, root;
+set lock_wait_timeout= 1;
+insert into t1 values (1);
+Warnings:
+Warning	4114	Versioned table `test`.`t1`: last HISTORY partition (`p0`) is out of INTERVAL, need more HISTORY partitions
+Error	1205	Lock wait timeout exceeded; try restarting transaction
+Warning	4168	Auto-increment history partition: alter partition table failed
+Warning	4168	Versioned table `test`.`t1`: adding HISTORY partition failed with error 0, see error log for details
+select * from t1;
+x
+1
+disconnect con1;
+connection default;
+drop table t1;

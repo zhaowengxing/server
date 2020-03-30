@@ -1137,4 +1137,19 @@ show create table t1;
 
 drop tables t1;
 
+create or replace table t1 (x int) with system versioning engine innodb
+partition by system_time interval 1 hour auto;
+start transaction;
+select * from t1;
+
+--connect con1, localhost, root
+set lock_wait_timeout= 1;
+insert into t1 values (1);
+select * from t1;
+
+# cleanup
+--disconnect con1
+--connection default
+drop table t1;
+
 --source suite/versioning/common_finish.inc

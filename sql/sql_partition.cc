@@ -6817,7 +6817,8 @@ static void handle_alter_part_error(ALTER_PARTITION_PARAM_TYPE *lpt,
   DBUG_ENTER("handle_alter_part_error");
   DBUG_ASSERT(table->m_needs_reopen);
 
-  if (close_table)
+  /* The table may not be open if ha_partition::change_partitions() failed */
+  if (close_table && !table->file->is_open())
   {
     /*
       All instances of this table needs to be closed.

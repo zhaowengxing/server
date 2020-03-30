@@ -1318,6 +1318,49 @@ static int prepare_or_error(handlerton *ht, THD *thd, bool all)
 }
 
 
+inline Ha_trx_info* get_first_ha_info(Ha_trx_info *info_arg, THD *thd, bool all)
+{
+  Ha_trx_info *ret= all ? &thd->ha_data[binlog_hton->slot].ha_info[all] : NULL;
+
+  return (ret && ret->is_started()) ? ret : info_arg;
+}
+
+inline Ha_trx_info* get_next_ha_info(Ha_trx_info *ha_info, THD *thd, bool all,
+                                     bool do_reset= true)
+{
+  Ha_trx_info *ha_info_next;
+
+  if (all && ha_info == &thd->ha_data[binlog_hton->slot].ha_info[1])
+  {
+    if (likely(ha_info == thd->transaction.all.ha_list))
+    {
+      ha_info_next= ha_info->next();
+      if (do_reset)
+        ha_info->reset(); /* keep it conveniently zero-filled */
+     }
+    else
+    {
+      ha_info_next= thd->transaction.all.ha_list;
+    }
+  }
+  else
+  {
+    ha_info_next= ha_info->next(); // "regular" path for next
+    if (do_reset)
+      ha_info->reset();
+    if (all && ha_info_next == &thd->ha_data[binlog_hton->slot].ha_info[1])
+    {
+      ha_info= ha_info_next->next();
+      if (do_reset)
+        ha_info_next->reset();
+      ha_info_next= ha_info;
+    }
+  }
+
+  return ha_info_next;
+}
+
+
 /**
   @retval
     0   ok
@@ -1333,7 +1376,9 @@ int ha_prepare(THD *thd)
 
   if (ha_info)
   {
-    for (; ha_info; ha_info= ha_info->next())
+    for (ha_info= get_first_ha_info(ha_info, thd, all);
+         ha_info;
+         ha_info= get_next_ha_info(ha_info, thd, all, false))
     {
       handlerton *ht= ha_info->ht();
       if (ht->prepare)
@@ -1859,13 +1904,16 @@ commit_one_phase_2(THD *thd, bool all, THD_TRANS *trans, bool is_real_trans)
 {
   int error= 0;
   uint count= 0;
-  Ha_trx_info *ha_info= trans->ha_list, *ha_info_next;
+  Ha_trx_info *ha_info= trans->ha_list;
   DBUG_ENTER("commit_one_phase_2");
   if (is_real_trans)
     DEBUG_SYNC(thd, "commit_one_phase_2");
   if (ha_info)
   {
-    for (; ha_info; ha_info= ha_info_next)
+    bool xall= all && thd->transaction.xid_state.is_explicit_XA();
+    for (ha_info= get_first_ha_info(ha_info, thd, xall);
+         ha_info;
+         ha_info= get_next_ha_info(ha_info, thd, xall))
     {
       int err;
       handlerton *ht= ha_info->ht();
@@ -1878,8 +1926,6 @@ commit_one_phase_2(THD *thd, bool all, THD_TRANS *trans, bool is_real_trans)
       status_var_increment(thd->status_var.ha_commit_count);
       if (is_real_trans && ht != binlog_hton && ha_info->is_trx_read_write())
         ++count;
-      ha_info_next= ha_info->next();
-      ha_info->reset(); /* keep it conveniently zero-filled */
     }
     trans->ha_list= 0;
     trans->no_2pc=0;
@@ -1903,12 +1949,11 @@ commit_one_phase_2(THD *thd, bool all, THD_TRANS *trans, bool is_real_trans)
   DBUG_RETURN(error);
 }
 
-
 int ha_rollback_trans(THD *thd, bool all)
 {
   int error=0;
   THD_TRANS *trans=all ? &thd->transaction.all : &thd->transaction.stmt;
-  Ha_trx_info *ha_info= trans->ha_list, *ha_info_next;
+  Ha_trx_info *ha_info= trans->ha_list;
   /*
     "real" is a nick name for a transaction for which a commit will
     make persistent changes. E.g. a 'stmt' transaction inside a 'all'
@@ -1976,7 +2021,10 @@ int ha_rollback_trans(THD *thd, bool all)
     if (is_real_trans)                          /* not a statement commit */
       thd->stmt_map.close_transient_cursors();
 
-    for (; ha_info; ha_info= ha_info_next)
+    bool xall= all && thd->transaction.xid_state.is_explicit_XA();
+    for (ha_info= get_first_ha_info(ha_info, thd, xall);
+         ha_info;
+         ha_info= get_next_ha_info(ha_info, thd, xall))
     {
       int err;
       handlerton *ht= ha_info->ht();
@@ -1991,8 +2039,6 @@ int ha_rollback_trans(THD *thd, bool all)
 #endif /* WITH_WSREP */
       }
       status_var_increment(thd->status_var.ha_rollback_count);
-      ha_info_next= ha_info->next();
-      ha_info->reset(); /* keep it conveniently zero-filled */
     }
     trans->ha_list= 0;
     trans->no_2pc=0;
@@ -2090,6 +2136,15 @@ int ha_commit_or_rollback_by_xid(XID *xid, bool commit)
   struct xahton_st xaop;
   xaop.xid= xid;
   xaop.result= 1;
+
+  if (binlog_hton->recover)
+  {
+    // int  (*recover)(handlerton *hton, XID *xid_list, uint len);
+    if (commit)
+      binlog_hton->commit_by_xid(binlog_hton, xid);
+    else
+      binlog_hton->rollback_by_xid(binlog_hton, xid);
+  }
 
   plugin_foreach(NULL, commit ? xacommit_handlerton : xarollback_handlerton,
                  MYSQL_STORAGE_ENGINE_PLUGIN, &xaop);

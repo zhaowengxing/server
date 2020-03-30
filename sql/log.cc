@@ -522,7 +522,8 @@ public:
                     ulong *param_ptr_binlog_stmt_cache_disk_use,
                     ulong *param_ptr_binlog_cache_use,
                     ulong *param_ptr_binlog_cache_disk_use)
-    : last_commit_pos_offset(0), using_xa(FALSE), xa_xid(0)
+    : last_commit_pos_offset(0), using_xa(FALSE), xa_xid(0),
+      has_completed_by_xid(false)
   {
      stmt_cache.set_binlog_cache_info(param_max_binlog_stmt_cache_size,
                                       param_ptr_binlog_stmt_cache_use,
@@ -584,7 +585,7 @@ public:
   ulong binlog_id;
   /* Set if we get an error during commit that must be returned from unlog(). */
   bool delayed_error;
-
+  bool has_completed_by_xid;
 private:
 
   binlog_cache_mngr& operator=(const binlog_cache_mngr& info);
@@ -2025,24 +2026,27 @@ static int binlog_xa_recover_dummy(handlerton *hton __attribute__((unused)),
 static int binlog_commit_by_xid(handlerton *hton, XID *xid)
 {
   THD *thd= current_thd;
-
-  (void) thd->binlog_setup_trx_data();
+  binlog_cache_mngr *cache_mngr= thd->binlog_setup_trx_data();
 
   DBUG_ASSERT(thd->lex->sql_command == SQLCOM_XA_COMMIT);
 
-  return binlog_commit(hton, thd, TRUE);
+  cache_mngr->has_completed_by_xid= !cache_mngr->has_completed_by_xid;
+
+  return cache_mngr->has_completed_by_xid ? binlog_commit(hton, thd, TRUE) : 0;
 }
 
 
 static int binlog_rollback_by_xid(handlerton *hton, XID *xid)
 {
   THD *thd= current_thd;
-
-  (void) thd->binlog_setup_trx_data();
+  binlog_cache_mngr *cache_mngr= thd->binlog_setup_trx_data();
 
   DBUG_ASSERT(thd->lex->sql_command == SQLCOM_XA_ROLLBACK ||
               (thd->transaction.xid_state.get_state_code() == XA_ROLLBACK_ONLY));
-  return binlog_rollback(hton, thd, TRUE);
+
+  cache_mngr->has_completed_by_xid= !cache_mngr->has_completed_by_xid;
+
+  return cache_mngr->has_completed_by_xid ? binlog_rollback(hton, thd, TRUE) : 0;
 }
 
 

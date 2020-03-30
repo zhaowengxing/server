@@ -7037,6 +7037,8 @@ uint fast_alter_partition_table(THD *thd, TABLE *table,
   bool close_table_on_failure= FALSE;
   bool frm_install= FALSE;
   MDL_ticket *mdl_ticket= table->mdl_ticket;
+  /* option_bits is used to mark if we should log the query with IF EXISTS */
+  ulonglong save_option_bits= thd->variables.option_bits;
   DBUG_ENTER("fast_alter_partition_table");
   DBUG_ASSERT(table->m_needs_reopen);
 
@@ -7056,6 +7058,10 @@ uint fast_alter_partition_table(THD *thd, TABLE *table,
   lpt->deleted= 0;
   lpt->pack_frm_data= NULL;
   lpt->pack_frm_len= 0;
+
+  /* Add IF EXISTS to binlog if shared table */
+  if (table->file->partition_ht()->flags & HTON_TABLE_MAY_NOT_EXIST_ON_SLAVE)
+    thd->variables.option_bits|= OPTION_IF_EXISTS;
 
   if (table->file->alter_table_flags(alter_info->flags) &
         HA_PARTITION_ONE_PHASE)
@@ -7390,6 +7396,7 @@ uint fast_alter_partition_table(THD *thd, TABLE *table,
     if (alter_partition_lock_handling(lpt))
       goto err;
   }
+  thd->variables.option_bits= save_option_bits;
   downgrade_mdl_if_lock_tables_mode(thd, mdl_ticket, MDL_SHARED_NO_READ_WRITE);
   /*
     A final step is to write the query to the binlog and send ok to the
@@ -7397,6 +7404,7 @@ uint fast_alter_partition_table(THD *thd, TABLE *table,
   */
   DBUG_RETURN(fast_end_partition(thd, lpt->copied, lpt->deleted, table_list));
 err:
+  thd->variables.option_bits= save_option_bits;
   downgrade_mdl_if_lock_tables_mode(thd, mdl_ticket, MDL_SHARED_NO_READ_WRITE);
   DBUG_RETURN(TRUE);
 }

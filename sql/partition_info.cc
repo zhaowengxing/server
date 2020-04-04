@@ -932,15 +932,19 @@ void vers_add_auto_parts(THD *thd)
 {
   HA_CREATE_INFO create_info;
   Alter_info alter_info;
+  String query;
   TABLE_LIST *table_list= NULL;
   partition_info *save_part_info= thd->work_part_info;
   Query_tables_list save_query_tables;
   Reprepare_observer *save_reprepare_observer= thd->m_reprepare_observer;
   Diagnostics_area new_stmt_da(thd->query_id, false, true);
   Diagnostics_area *save_stmt_da= thd->get_stmt_da();
+  bool save_no_write_to_binlog= thd->lex->no_write_to_binlog;
+  const CSET_STRING save_query= thd->query_string;
   thd->m_reprepare_observer= NULL;
   thd->lex->reset_n_backup_query_tables_list(&save_query_tables);
   thd->in_sub_stmt|= SUB_STMT_AUTO_HIST;
+  thd->lex->no_write_to_binlog= !thd->is_current_stmt_binlog_format_row();
   TABLE_LIST *tl;
 
   DBUG_ASSERT(!thd->vers_auto_part_tables.is_empty());
@@ -1080,6 +1084,25 @@ vers_make_name_err:
       goto exit;
     }
 
+    // Forge query string for rpl logging
+    if (!thd->lex->no_write_to_binlog)
+    {
+      query.set(STRING_WITH_LEN("ALTER TABLE `"), &my_charset_latin1);
+
+      if (query.append(table->s->db) ||
+          query.append(STRING_WITH_LEN("`.`")) ||
+          query.append(table->s->table_name) ||
+          query.append("` ADD PARTITION (PARTITION `") ||
+          query.append(part_name) ||
+          query.append("` HISTORY) AUTO_INCREMENT"))
+      {
+        my_error(ER_OUT_OF_RESOURCES, MYF(ME_ERROR_LOG));
+        goto exit;
+      }
+      CSET_STRING qs(query.c_ptr(), query.length(), &my_charset_latin1);
+      thd->set_query(qs);
+    }
+
     if (fast_alter_partition_table(thd, table, &alter_info, &create_info,
                                    tl, &table->s->db, &table->s->table_name))
     {
@@ -1108,6 +1131,8 @@ open_err:
   if (!new_stmt_da.is_warning_info_empty())
     save_stmt_da->copy_sql_conditions_from_wi(thd, new_stmt_da.get_warning_info());
   thd->set_stmt_da(save_stmt_da);
+  thd->lex->no_write_to_binlog= save_no_write_to_binlog;
+  thd->set_query(save_query);
 }
 
 

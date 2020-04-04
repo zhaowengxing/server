@@ -7531,14 +7531,19 @@ add_partition_rule:
 
 add_part_extra:
           /* empty */
-        | '(' part_def_list ')'
+        | '(' part_def_list ')' opt_vers_auto_inc
           {
             LEX *lex= Lex;
             lex->part_info->num_parts= lex->part_info->partitions.elements;
+            if ($4)
+              lex->alter_info.partition_flags|= ALTER_PARTITION_AUTO_HIST;
           }
-        | PARTITIONS_SYM real_ulong_num
+        | PARTITIONS_SYM real_ulong_num opt_vers_auto_inc
           {
-            Lex->part_info->num_parts= $2;
+            LEX *lex= Lex;
+            lex->part_info->num_parts= $2;
+            if ($3)
+              lex->alter_info.partition_flags|= ALTER_PARTITION_AUTO_HIST;
           }
         ;
 

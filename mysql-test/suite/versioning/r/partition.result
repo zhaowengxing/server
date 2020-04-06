@@ -1089,20 +1089,14 @@ drop tables t1;
 # MDEV-17554 Auto-create new partition for system versioned tables with history partitioned by INTERVAL/LIMIT
 #
 create or replace table t1 (x int) with system versioning
-partition by system_time limit 999 auto_increment;
-ERROR HY000: Wrong parameters for partitioned `t1`: wrong value for LIMIT (< 1000)
-create or replace table t1 (x int) with system versioning
-partition by system_time interval 3599 second auto_increment;
-ERROR HY000: Wrong parameters for partitioned `t1`: wrong value for INTERVAL (< 1 HOUR)
-create or replace table t1 (x int) with system versioning
-partition by system_time limit 1000 auto_increment;
+partition by system_time limit 1 auto_increment;
 affected rows: 0
 show create table t1;
 Table	Create Table
 t1	CREATE TABLE `t1` (
   `x` int(11) DEFAULT NULL
 ) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 WITH SYSTEM VERSIONING
- PARTITION BY SYSTEM_TIME LIMIT 1000 AUTO_INCREMENT
+ PARTITION BY SYSTEM_TIME LIMIT 1 AUTO_INCREMENT
 PARTITIONS 2
 affected rows: 1
 insert into t1 values (1);
@@ -1112,7 +1106,7 @@ Table	Create Table
 t1	CREATE TABLE `t1` (
   `x` int(11) DEFAULT NULL
 ) ENGINE=DEFAULT_ENGINE DEFAULT CHARSET=latin1 WITH SYSTEM VERSIONING
- PARTITION BY SYSTEM_TIME LIMIT 1000 AUTO_INCREMENT
+ PARTITION BY SYSTEM_TIME LIMIT 1 AUTO_INCREMENT
 PARTITIONS 3
 affected rows: 1
 # Increment from 2 to 5

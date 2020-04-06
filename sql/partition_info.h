@@ -37,10 +37,6 @@ struct st_ddl_log_memory_entry;
 
 /* Auto-create history partition configuration */
 static const uint VERS_MIN_EMPTY= 1;
-static const uint VERS_MIN_INTERVAL= 3600; // seconds
-static const uint VERS_MIN_LIMIT= 1000;
-static const uint VERS_ERROR_TIMEOUT= 300; // seconds
-
 
 struct Vers_part_info : public Sql_alloc
 {

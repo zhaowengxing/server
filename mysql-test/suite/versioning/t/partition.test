@@ -877,15 +877,8 @@ drop tables t1;
 --echo # MDEV-17554 Auto-create new partition for system versioned tables with history partitioned by INTERVAL/LIMIT
 --echo #
 --enable_info
---error ER_PART_WRONG_VALUE
 create or replace table t1 (x int) with system versioning
-partition by system_time limit 999 auto_increment;
---error ER_PART_WRONG_VALUE
-create or replace table t1 (x int) with system versioning
-partition by system_time interval 3599 second auto_increment;
-
-create or replace table t1 (x int) with system versioning
-partition by system_time limit 1000 auto_increment;
+partition by system_time limit 1 auto_increment;
 --replace_result $default_engine DEFAULT_ENGINE
 show create table t1;
 

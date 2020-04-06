@@ -2934,13 +2934,6 @@ bool partition_info::vers_set_interval(THD* thd, Item* interval,
     return true;
   }
 
-  if (auto_inc && vers_info->interval.lt(VERS_MIN_INTERVAL))
-  {
-    DBUG_ASSERT(VERS_MIN_INTERVAL == 3600);
-    my_error(ER_PART_WRONG_VALUE, MYF(0), table_name, "INTERVAL (< 1 HOUR)");
-    return true;
-  }
-
   /* 2. assign STARTS to interval.start */
   if (starts)
   {
@@ -3011,13 +3004,6 @@ bool partition_info::vers_set_limit(ulonglong limit, bool auto_inc,
                                     const char *table_name)
 {
   DBUG_ASSERT(part_type == VERSIONING_PARTITION);
-
-  if (auto_inc && limit < VERS_MIN_LIMIT)
-  {
-    DBUG_ASSERT(VERS_MIN_LIMIT == 1000);
-    my_error(ER_PART_WRONG_VALUE, MYF(0), table_name, "LIMIT (< 1000)");
-    return true;
-  }
 
   if (limit < 1)
   {

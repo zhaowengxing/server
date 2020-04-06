@@ -77,6 +77,33 @@ fil_type_is_data(
 
 struct fil_node_t;
 
+
+class range_t {
+private:
+mutable uint32_t first_val;
+mutable uint32_t last_val;
+public:
+range_t() : first_val(0), last_val(0) {}
+range_t (uint32_t st_val) { first_val = last_val = st_val; }
+range_t (uint32_t st_val,
+         uint32_t end_val) : first_val (st_val),last_val(end_val) {}
+
+uint32_t& last() const { return last_val; }
+void set_last(uint32_t val) const { last_val = val; }
+void set_first(uint32_t val) const { first_val = val; }
+uint32_t& first() const { return first_val; }
+};
+
+struct range_compare
+{
+  bool operator() (const range_t& lhs, const range_t& rhs) const
+  {
+    return lhs.first() < rhs.first();
+  }
+};
+
+typedef std::set<range_t, range_compare> range_set_t;
+
 #endif
 
 /** Tablespace or log data space */
@@ -168,6 +195,8 @@ struct fil_space_t
 	/** True if file system storing this tablespace supports
 	punch hole */
 	bool		punch_hole;
+
+	range_set_t*	freed_ranges;
 
 	ulint		magic_n;/*!< FIL_SPACE_MAGIC_N */
 
@@ -531,6 +560,129 @@ struct fil_space_t
 		return(ssize == 0 || !is_ibd
 		       || srv_page_size != UNIV_PAGE_SIZE_ORIG);
 	}
+
+#ifndef UNIV_INNOCHECKSUM
+  void merge_range(const range_set_t::iterator& range)
+  {
+    if (range == freed_ranges->begin())
+      return;
+
+    range_set_t::iterator prev_range = std::prev(range, 1);
+    if ((*range).first() != (*prev_range).last() + 1)
+      return;
+
+    /* Merge the current range with previous range */
+    (*prev_range).set_last((*range).last());
+
+    freed_ranges->erase(*range);
+  }
+
+  void split_range(const range_t& range, int32_t offset)
+  {
+    uint32_t& split1_start_val = range.first();
+    uint32_t& split2_end_val = range.last();
+
+    /* Remove the existing element */
+    freed_ranges->erase(range);
+    range_t split1(split1_start_val, offset - 1);
+    range_t split2(offset + 1, split2_end_val);
+
+    /* Insert the two elements */
+    freed_ranges->insert(split1);
+    freed_ranges->insert(split2);
+  }
+
+  void remove_free_page(uint32_t offset)
+  {
+    range_t new_range(offset);
+    range_set_t::iterator r_offset = freed_ranges->lower_bound(new_range);
+
+    if (freed_ranges->size() == 0)
+      return;
+
+    if (r_offset == freed_ranges->end())
+    {
+      range_set_t::reverse_iterator rlast = freed_ranges->rbegin();
+      uint32_t& last_end_val = (*rlast).last();
+      if (last_end_val == offset)
+        last_end_val--;
+      else if (last_end_val > offset)
+        split_range(*rlast, offset);
+      return;
+    }
+
+    uint32_t& start_val = (*r_offset).first();
+    uint32_t& end_val = (*r_offset).last();
+
+    if (start_val > offset)
+    {
+      /* Iterate the previous ranges to delete */
+      range_set_t::iterator prev_last = std::prev(r_offset, 1);
+      uint32_t& prev_last_end= (*prev_last).last();
+      
+      if (prev_last_end == offset)
+        prev_last_end--;
+      else if (prev_last_end > offset)
+        split_range(*prev_last, offset);
+    }
+    else
+    {
+      /* Currenr range */
+      if (offset == start_val)
+      {
+        if (start_val == end_val)
+          /* Remove the range itself */
+          freed_ranges->erase(*r_offset);
+        else
+          start_val++;
+      } else if (start_val > offset && end_val > offset)
+               split_range(*r_offset, offset);
+    }
+  }
+
+  void add_free_page(uint32_t offset)
+  {
+    range_t new_range(offset);
+    range_set_t::iterator r_offset = freed_ranges->lower_bound(new_range);
+    range_set_t::reverse_iterator rlast = freed_ranges->rbegin();
+
+    if (freed_ranges->size() == 0)
+    {
+new_range:
+      freed_ranges->insert(offset);
+      return;
+    }
+
+    if (r_offset == freed_ranges->end() && rlast != freed_ranges->rend())
+    {
+      uint32_t& last_end_val = (*rlast).last();
+      if (last_end_val + 1 < offset)
+        goto new_range;
+      else if (last_end_val + 1 == offset)
+        last_end_val++;
+      return;
+    }
+
+    uint32_t& start_val= (*r_offset).first();
+    /* Change starting of the existing range */
+    if (start_val - 1 == offset)
+    {
+      start_val--;
+      merge_range(r_offset);
+    }
+    else
+    {
+      /* previous range last_value alone */
+      range_set_t::iterator prev_last = std::prev(r_offset, 1);
+      uint32_t& last_val = (*prev_last).last();
+      if (last_val + 1 == offset)
+        last_val++;
+      else
+        /* Insert new range */
+      goto new_range;
+    }
+  }
+#endif
 };
 
 #ifndef UNIV_INNOCHECKSUM

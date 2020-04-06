@@ -413,6 +413,25 @@ void mtr_t::commit()
     to insert into the flush list. */
     log_mutex_exit();
 
+    if (m_user_space != NULL)
+    {
+      for (auto const& page_no: freed_pages)
+      {
+        ut_ad(mtr_memo_contains(this, &m_user_space->latch,
+                                MTR_MEMO_X_LOCK));
+        m_user_space->add_free_page(page_no);
+      }
+    } else if (freed_pages.size()) {
+       if (is_freed_system_tablespace_page()) {
+	 ut_ad(mtr_memo_contains(this, &fil_system.sys_space->latch,
+				 MTR_MEMO_X_LOCK));
+       } else {
+	 ut_ad(m_log_mode != MTR_LOG_ALL);
+         ut_ad(mtr_memo_contains(this, &fil_system.temp_space->latch,
+	                         MTR_MEMO_X_LOCK));
+       }
+    }
+
     m_memo.for_each_block_in_reverse(CIterate<const ReleaseBlocks>
                                      (ReleaseBlocks(start_lsn, m_commit_lsn)));
     if (m_made_dirty)
@@ -423,6 +442,11 @@ void mtr_t::commit()
   else
     m_memo.for_each_block_in_reverse(CIterate<ReleaseAll>());
 
+  for (auto const& page_no : freed_pages) {
+     fprintf(stderr, "freed page %d\n", page_no);
+  }
+
+  clear_freed_pages();
   release_resources();
 }
 

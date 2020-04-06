@@ -1256,7 +1256,7 @@ static void fsp_free_page(fil_space_t* space, page_no_t offset, mtr_t* mtr)
 		return;
 	}
 
-	mtr->free(page_id_t(space->id, offset));
+	mtr->free(*space, static_cast<uint32_t>(offset));
 
 	const ulint	bit = offset % FSP_EXTENT_SIZE;
 
@@ -2648,6 +2648,8 @@ fseg_free_page_func(
 
 	fseg_free_page_low(seg_inode, iblock, space, offset, ahi, mtr);
 
+	mtr->add_freed_pages(static_cast<uint32_t>(offset));
+
 	buf_page_free(page_id_t(space->id, offset), mtr, __FILE__, __LINE__);
 
 	DBUG_VOID_RETURN;
@@ -2761,6 +2763,9 @@ fseg_free_extent(
 			  page_id_t(space->id, first_page_in_extent + i),
 			  mtr, __FILE__, __LINE__);
 		}
+
+		mtr->add_freed_pages(
+			static_cast<uint32_t>(first_page_in_extent + i));
 	}
 }
 

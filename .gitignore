@@ -581,6 +581,7 @@ man/mariadb-check.1
 man/mariadb-client-test.1
 man/mariadb-client-test-embedded.1
 man/mariadb_config.1
+man/mariadb-config.1
 man/mariadb-convert-table-format.1
 man/mariadbd.8
 man/mariadbd-multi.1

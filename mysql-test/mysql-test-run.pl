@@ -130,6 +130,7 @@ our $path_testlog;
 our $default_vardir;
 our $opt_vardir;                # Path to use for var/ dir
 our $plugindir;
+our $client_plugindir;
 my $path_vardir_trace;          # unix formatted opt_vardir for trace files
 my $opt_tmpdir;                 # Path to use for tmp/ dir
 my $opt_tmpdir_pid;
@@ -2784,9 +2785,9 @@ sub setup_vardir() {
   # and make them world readable
   copytree("$glob_mysql_test_dir/std_data", "$opt_vardir/std_data", "0022");
 
-  # create a plugin dir and copy or symlink plugins into it
   unless($plugindir)
   {
+    # create a plugin dir and copy or symlink plugins into it
     if ($source_dist)
     {
       $plugindir="$opt_vardir/plugins";
@@ -2838,7 +2839,11 @@ sub setup_vardir() {
     else
     {
       # hm, what paths work for debs and for rpms ?
-      for (<$bindir/lib64/mysql/plugin/*.so>,
+      #
+      # Note: libmariadb3 is first, as in Debian, we
+      #       separate server plugins from client plugins.
+      for (<$bindir/lib/*/libmariadb3/plugin/*.so>,
+           <$bindir/lib64/mysql/plugin/*.so>,
            <$bindir/lib/mysql/plugin/*.so>,
            <$bindir/lib64/mariadb/plugin/*.so>,
            <$bindir/lib/mariadb/plugin/*.so>,
@@ -2846,8 +2851,14 @@ sub setup_vardir() {
            <$bindir/lib/plugin/*.dll>)
       {
         my $pname=basename($_);
+        my $dirname=dirname($_);
         set_plugin_var($pname);
-        $plugindir=dirname($_) unless $plugindir;
+        $client_plugindir=$dirname unless $client_plugindir;
+        # Server plugins are never put into libmariadb3 folder.
+        if ($dirname !~ /libmariadb3\/plugin$/)
+        {
+          $plugindir=$dirname unless $plugindir;
+        }
       }
     }
   }

@@ -304,15 +304,15 @@ void report_json_error_ex(String *js, json_engine_t *je,
 #define TRIVIAL_PATH_NOT_ALLOWED 3
 
 #define report_path_error(js, je, n_param) \
-  report_path_error_ex(js, je, func_name(), n_param,\
+  report_path_error_ex(js->ptr(), je, func_name(), n_param,\
       Sql_condition::WARN_LEVEL_WARN)
 
-static void report_path_error_ex(String *ps, json_path_t *p,
-                                 const char *fname, int n_param,
-                                 Sql_condition::enum_warning_level lv)
+void report_path_error_ex(const char *ps, json_path_t *p,
+                          const char *fname, int n_param,
+                          Sql_condition::enum_warning_level lv)
 {
   THD *thd= current_thd;
-  int position= (int)((const char *) p->s.c_str - ps->ptr() + 1);
+  int position= (int)((const char *) p->s.c_str - ps + 1);
   uint code;
 
   n_param++;
@@ -331,8 +331,11 @@ static void report_path_error_ex(String *ps, json_path_t *p,
 
   case JE_DEPTH:
     code= ER_JSON_PATH_DEPTH;
-    push_warning_printf(thd, lv, code, ER_THD(thd, code),
-                        JSON_DEPTH_LIMIT, n_param, fname, position);
+    if (lv == Sql_condition::WARN_LEVEL_ERROR)
+      my_error(code, MYF(0), JSON_DEPTH_LIMIT, n_param, fname, position);
+    else
+      push_warning_printf(thd, lv, code, ER_THD(thd, code),
+                          JSON_DEPTH_LIMIT, n_param, fname, position);
     return;
 
   case NO_WILDCARD_ALLOWED:
@@ -347,10 +350,12 @@ static void report_path_error_ex(String *ps, json_path_t *p,
   default:
     return;
   }
-  push_warning_printf(thd, lv, code, ER_THD(thd, code),
-                      n_param, fname, position);
+  if (lv == Sql_condition::WARN_LEVEL_ERROR)
+    my_error(code, MYF(0), n_param, fname, position);
+  else
+    push_warning_printf(thd, lv, code, ER_THD(thd, code),
+                        n_param, fname, position);
 }
-
 
 
 /*

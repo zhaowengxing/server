@@ -92,6 +92,7 @@ public:
   bool set_cmp_func_int();
   bool set_cmp_func_real();
   bool set_cmp_func_decimal();
+  bool set_cmp_always_equal();
 
   inline int set_cmp_func(Item_func_or_sum *owner_arg,
 			  Item **a1, Item **a2, bool set_null_arg)
@@ -129,6 +130,7 @@ public:
   int compare_e_json_str_basic(Item *j, Item *s);
   int compare_e_json_str();
   int compare_e_str_json();
+  int compare_always_equal() { return 0; }
 
   void min_max_update_field_native(THD *thd, Field *field, Item *item,
                                    int cmp_sign);
@@ -740,6 +742,8 @@ public:
   friend class  Arg_comparator;
   Item *get_copy(THD *thd)
   { return get_item_copy<Item_func_eq>(thd, this); }
+  void set_always_equal()
+  { (void) cmp.set_cmp_always_equal(); }
 };
 
 class Item_func_equal :public Item_bool_rowready_func2

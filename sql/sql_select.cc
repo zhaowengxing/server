@@ -16312,6 +16312,10 @@ simplify_joins(JOIN *join, List<TABLE_LIST> *join_list, COND *conds, bool top,
       table->embedding->nested_join->not_null_tables|= not_null_tables;
     }
 
+    if (table->table_function &&
+        table->table_function->setup(join->thd, table, &conds))
+      DBUG_RETURN(0);
+
     if (!(table->outer_join & (JOIN_TYPE_LEFT | JOIN_TYPE_RIGHT)) ||
         (used_tables & not_null_tables))
     {
@@ -16324,7 +16328,6 @@ simplify_joins(JOIN *join, List<TABLE_LIST> *join_list, COND *conds, bool top,
       table->outer_join= 0;
       if (!(straight_join || table->straight))
       {
-        table->dep_tables= 0;
         TABLE_LIST *embedding= table->embedding;
         while (embedding)
         {

@@ -672,6 +672,13 @@ bool Arg_comparator::set_cmp_func_decimal()
 }
 
 
+bool Arg_comparator::set_cmp_always_equal()
+{
+  func= &Arg_comparator::compare_always_equal;
+  return false;
+}
+
+
 /**
   Convert and cache a constant.
 

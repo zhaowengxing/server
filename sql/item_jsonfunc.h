@@ -40,6 +40,10 @@ public:
   }
 };
 
+void report_path_error_ex(const char *ps, json_path_t *p,
+                          const char *fname, int n_param,
+                          Sql_condition::enum_warning_level lv);
+
 
 class Json_engine_scan: public json_engine_t
 {

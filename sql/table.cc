@@ -4145,6 +4145,12 @@ partititon_err:
       share->not_usable_by_query_cache= TRUE;
     if (outparam->file->ha_table_flags() & HA_CAN_ONLINE_BACKUPS)
       share->online_backup= 1;
+
+// #ifdef WITH_PARTITION_STORAGE_ENGINE
+//     if (outparam->part_info &&
+//         outparam->part_info->part_type == VERSIONING_PARTITION)
+//       outparam->part_info->vers_set_hist_part(thd);
+// #endif
   }
 
   if (share->no_replicate || !binlog_filter->db_ok(share->db.str))

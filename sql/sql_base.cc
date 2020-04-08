@@ -1863,6 +1863,24 @@ bool open_table(THD *thd, TABLE_LIST *table_list, Open_table_context *ot_ctx)
       DBUG_PRINT("info",("Using locked table"));
 #ifdef WITH_PARTITION_STORAGE_ENGINE
       part_names_error= set_partitions_as_used(table_list, table);
+      if (table->part_info &&
+          table->part_info->part_type == VERSIONING_PARTITION)
+      {
+        switch (thd->lex->sql_command)
+        {
+        case SQLCOM_DELETE:
+        case SQLCOM_UPDATE:
+        case SQLCOM_INSERT:
+        case SQLCOM_INSERT_SELECT:
+        case SQLCOM_LOAD:
+        case SQLCOM_REPLACE:
+        case SQLCOM_REPLACE_SELECT:
+        case SQLCOM_DELETE_MULTI:
+        case SQLCOM_UPDATE_MULTI:
+          table->part_info->vers_set_hist_part(thd);
+        default:;
+        }
+      }
 #endif
       goto reset;
     }
@@ -2098,6 +2116,27 @@ retry_share:
     /* Add table to the share's used tables list. */
     tc_add_table(thd, table);
   }
+
+#ifdef WITH_PARTITION_STORAGE_ENGINE
+  if (table->part_info &&
+      table->part_info->part_type == VERSIONING_PARTITION)
+  {
+    switch (thd->lex->sql_command)
+    {
+    case SQLCOM_DELETE:
+    case SQLCOM_UPDATE:
+    case SQLCOM_INSERT:
+    case SQLCOM_INSERT_SELECT:
+    case SQLCOM_LOAD:
+    case SQLCOM_REPLACE:
+    case SQLCOM_REPLACE_SELECT:
+    case SQLCOM_DELETE_MULTI:
+    case SQLCOM_UPDATE_MULTI:
+      table->part_info->vers_set_hist_part(thd);
+    default:;
+    }
+  }
+#endif
 
   if (!(flags & MYSQL_OPEN_HAS_MDL_LOCK) &&
       table->s->table_category < TABLE_CATEGORY_INFORMATION)

@@ -2791,6 +2791,9 @@ sub setup_vardir() {
     if ($source_dist)
     {
       $plugindir="$opt_vardir/plugins";
+      # Source builds collect both client plugins and server plugins in the
+      # same directory.
+      $client_plugindir= $plugindir;
       mkpath($plugindir);
       if (IS_WINDOWS)
       {
@@ -2839,6 +2842,18 @@ sub setup_vardir() {
     else
     {
       # hm, what paths work for debs and for rpms ?
+      for (<$bindir/lib64/mysql/plugin/*.so>,
+           <$bindir/lib/mysql/plugin/*.so>,
+           <$bindir/lib64/mariadb/plugin/*.so>,
+           <$bindir/lib/mariadb/plugin/*.so>,
+           <$bindir/lib/plugin/*.so>,             # bintar
+           <$bindir/lib/plugin/*.dll>)
+      {
+        my $pname= basename($_);
+        set_plugin_var($pname);
+        $plugindir= dirname($_) unless $plugindir;
+      }
+
       #
       # Note: libmariadb3 is first, as in Debian, we
       #       separate server plugins from client plugins.
@@ -2850,15 +2865,7 @@ sub setup_vardir() {
            <$bindir/lib/plugin/*.so>,             # bintar
            <$bindir/lib/plugin/*.dll>)
       {
-        my $pname=basename($_);
-        my $dirname=dirname($_);
-        set_plugin_var($pname);
-        $client_plugindir=$dirname unless $client_plugindir;
-        # Server plugins are never put into libmariadb3 folder.
-        if ($dirname !~ /libmariadb3\/plugin$/)
-        {
-          $plugindir=$dirname unless $plugindir;
-        }
+        $client_plugindir= dirname($_) unless $client_plugindir;
       }
     }
   }

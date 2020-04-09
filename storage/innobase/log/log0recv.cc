@@ -2533,7 +2533,7 @@ inline buf_block_t *recv_sys_t::recover_low(const page_id_t page_id,
   {
     mtr.start();
     mtr.set_log_mode(MTR_LOG_NONE);
-    block= buf_page_create(page_id, space->zip_size(), &mtr);
+    block= buf_page_create(space, page_id.page_no(), space->zip_size(), &mtr);
     p= recv_sys.pages.find(page_id);
     if (p == recv_sys.pages.end())
     {

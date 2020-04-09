@@ -1210,6 +1210,9 @@ leaf_loop:
 
 	bool finished = fseg_free_step(root + PAGE_HEADER + PAGE_BTR_SEG_LEAF,
 				       true, &mtr);
+	if (block->page.id.space() == TRX_SYS_SPACE)
+		mtr.freed_system_tablespace_page();
+
 	mtr_commit(&mtr);
 
 	if (!finished) {

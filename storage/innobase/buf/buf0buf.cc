@@ -4491,7 +4491,8 @@ FILE_PAGE (the other is buf_page_get_gen).
 @return pointer to the block, page bufferfixed */
 buf_block_t*
 buf_page_create(
-	const page_id_t		page_id,
+	fil_space_t*		space,
+	uint32_t		offset,
 	ulint			zip_size,
 	mtr_t*			mtr)
 {
@@ -4499,6 +4500,7 @@ buf_page_create(
 	buf_block_t*	block;
 	buf_block_t*	free_block	= NULL;
 	rw_lock_t*	hash_lock;
+	page_id_t	page_id(space->id, offset);
 
 	ut_ad(mtr->is_active());
 	ut_ad(page_id.space() != 0 || !zip_size);
@@ -4526,6 +4528,7 @@ buf_page_create(
 			the unnecessary invocation of buf_zip_decompress().
 			We may have to convert buf_page_t to buf_block_t,
 			but we are going to initialize the page. */
+			space->remove_free_page(offset);
 			return buf_page_get_gen(page_id, zip_size, RW_NO_LATCH,
 						block, BUF_GET_POSSIBLY_FREED,
 						__FILE__, __LINE__, mtr);

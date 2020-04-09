@@ -38,6 +38,7 @@ Created 10/25/1995 Heikki Tuuri
 #ifdef UNIV_LINUX
 # include <set>
 #endif
+#include <mutex>
 
 struct unflushed_spaces_tag_t;
 struct rotation_list_tag_t;
@@ -196,7 +197,11 @@ struct fil_space_t
 	punch hole */
 	bool		punch_hole;
 
+	std::mutex	freed_mutex;
+
 	range_set_t*	freed_ranges;
+
+	lsn_t		last_freed_lsn;
 
 	ulint		magic_n;/*!< FIL_SPACE_MAGIC_N */
 
@@ -291,6 +296,10 @@ struct fil_space_t
 	void release_for_io() { ut_ad(pending_io()); n_pending_ios--; }
 	/** @return whether I/O is pending */
 	bool pending_io() const { return n_pending_ios; }
+	/** @return last_freed_lsn */
+	lsn_t get_last_freed_lsn() { return last_freed_lsn; }
+	/** Update last_freed_lsn */
+	void update_last_freed_lsn(lsn_t lsn) { last_freed_lsn= lsn; }
 #endif /* !UNIV_INNOCHECKSUM */
 	/** FSP_SPACE_FLAGS and FSP_FLAGS_MEM_ flags;
 	check fsp0types.h to more info about flags. */
@@ -594,6 +603,7 @@ struct fil_space_t
 
   void remove_free_page(uint32_t offset)
   {
+    std::lock_guard<std::mutex>	freed_lock(freed_mutex);
     range_t new_range(offset);
     range_set_t::iterator r_offset = freed_ranges->lower_bound(new_range);
 
@@ -642,6 +652,7 @@ struct fil_space_t
 
   void add_free_page(uint32_t offset)
   {
+    std::lock_guard<std::mutex>	freed_lock(freed_mutex);
     range_t new_range(offset);
     range_set_t::iterator r_offset = freed_ranges->lower_bound(new_range);
     range_set_t::reverse_iterator rlast = freed_ranges->rbegin();

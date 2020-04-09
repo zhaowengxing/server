@@ -179,7 +179,7 @@ IF ((CMAKE_SYSTEM_NAME MATCHES "Linux" OR
 ENDIF()
 
 IF(WIN32)
-  SET(SQL_SOURCE ${SQL_SOURCE} handle_connections_win.cc)
+  SET(SQL_SOURCE ${SQL_SOURCE} handle_connections_win.cc nt_servc.cc)
 ENDIF()
 
 MYSQL_ADD_PLUGIN(partition ha_partition.cc STORAGE_ENGINE DEFAULT STATIC_ONLY
@@ -208,14 +208,13 @@ FOREACH(se aria partition perfschema sql_sequence wsrep)
 ENDFOREACH()
 
 IF(WIN32)
-  SET(MYSQLD_SOURCE main.cc nt_servc.cc message.rc)
-  TARGET_LINK_LIBRARIES(sql psapi)
+  SET(MYSQLD_SOURCE main.cc  message.rc)
 ELSE()
   SET(MYSQLD_SOURCE main.cc ${DTRACE_PROBES_ALL})
 ENDIF()
 
 
-IF(MSVC AND NOT WITHOUT_DYNAMIC_PLUGINS)
+IF(MSVC)
 
   # mysqld.exe must to export symbols from some specific libs.
   # These symbols are used by dynamic plugins, that "link" to mysqld.
@@ -254,7 +253,7 @@ IF(MSVC AND NOT WITHOUT_DYNAMIC_PLUGINS)
       FILE(REMOVE mysqld_lib\${CFG}.lib mysqld_lib\${CFG}.exp)
       SET(ENV{VS_UNICODE_OUTPUT})
       EXECUTE_PROCESS (
-        COMMAND \"${CMAKE_LINKER}\" /lib /NAME:mysqld.exe \"/DEF:${CMAKE_CURRENT_BINARY_DIR}/mysqld_lib\${CFG}.def\" /MACHINE:${_PLATFORM}
+        COMMAND \"${CMAKE_LINKER}\" /lib /NAME:server.dll \"/DEF:${CMAKE_CURRENT_BINARY_DIR}/mysqld_lib\${CFG}.def\" /MACHINE:${_PLATFORM}
         RESULT_VARIABLE ret)
       IF(NOT ret EQUAL 0)
         MESSAGE(FATAL_ERROR \"process failed ret=\${ret}\")
@@ -288,6 +287,17 @@ IF(MSVC AND NOT WITHOUT_DYNAMIC_PLUGINS)
   ADD_CUSTOM_TARGET(gen_mysqld_lib DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/mysqld_lib.stamp)
   ADD_LIBRARY(mysqld_import_lib UNKNOWN IMPORTED GLOBAL)
   SET_TARGET_PROPERTIES(mysqld_import_lib PROPERTIES IMPORTED_LOCATION ${MYSQLD_LIB})
+  ADD_DEPENDENCIES(mysqld_import_lib gen_mysqld_lib)
+  IF(NOT CLANG_CL)
+   SET(VERSIONINFO_DLL_RC ${PROJECT_BINARY_DIR}/versioninfo_dll.rc)
+  ENDIF()
+  ADD_LIBRARY(server SHARED
+    $<TARGET_OBJECTS:sql_builtins>
+    ${VERSIONINFO_DLL_RC}  
+   )
+  ADD_DEPENDENCIES(server gen_mysqld_lib)
+  SET_TARGET_PROPERTIES(server PROPERTIES LINK_FLAGS \"${MYSQLD_EXP}\")
+  target_link_libraries(server sql ${MYSQLD_STATIC_PLUGIN_LIBS} psapi)
 ENDIF()
 
 ADD_LIBRARY(sql_builtins STATIC ${CMAKE_CURRENT_BINARY_DIR}/sql_builtin.cc)
@@ -314,13 +324,14 @@ IF(NOT WITHOUT_DYNAMIC_PLUGINS)
   IF (MINGW OR CYGWIN)
     SET_TARGET_PROPERTIES(mariadbd PROPERTIES LINK_FLAGS "${mysqld_link_flags} -Wl,--export-all-symbols")
   ENDIF()
-  IF(MSVC)
-    SET_TARGET_PROPERTIES(mariadbd PROPERTIES LINK_FLAGS "${mysqld_link_flags} \"${MYSQLD_EXP}\"")
-    ADD_DEPENDENCIES(mariadbd gen_mysqld_lib)
-  ENDIF()
 ENDIF(NOT WITHOUT_DYNAMIC_PLUGINS)
 
-TARGET_LINK_LIBRARIES(mariadbd LINK_PRIVATE sql sql_builtins)
+IF(MSVC)
+ TARGET_LINK_LIBRARIES(mariadbd mysqld_import_lib)
+ ADD_DEPENDENCIES(mariadbd gen_mysqld_lib server)
+ELSE()
+ TARGET_LINK_LIBRARIES(mariadbd  LINK_PRIVATE sql sql_builtins)
+ENDIF()
 
 
 # Provide plugins with minimal set of libraries
@@ -461,7 +472,7 @@ IF(TARGET mariadbd AND NOT CMAKE_CROSSCOMPILING)
   ENDIF()
   ADD_CUSTOM_TARGET(initial_database  
     ${ALL_ON_WINDOWS}
-    DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/initdb.dep
+    DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/initdb.dep	
   )
 ENDIF()
 

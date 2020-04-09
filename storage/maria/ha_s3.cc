@@ -311,9 +311,19 @@ static my_bool s3_info_init(S3_INFO *s3_info, const char *path,
 static int is_mariadb_internal_tmp_table(const char *table_name)
 {
   int length;
+  const int p_length= sizeof(tmp_file_prefix);  // prefix + '-'
   /* Temporary table from ALTER TABLE */
-  if (!strncmp(table_name, "#sql-", 5))
+  if (!strncmp(table_name, tmp_file_prefix "-" , p_length))
+  {
+    /*
+      Don't skip internal tables used by ALTER TABLE and ALTER PARTITION
+    */
+    if (!strncmp(table_name+p_length, "backup-", sizeof("backup-")-1) ||
+        !strncmp(table_name+p_length, "exchange-", sizeof("exchange-")-1) ||
+        !strncmp(table_name+p_length, "temptable-", sizeof("temptable-")-1))
+      return 0;
     return 1;
+  }
   length= strlen(table_name);
   if (length > 5 && !strncmp(table_name + length - 5, "#TMP#", 5))
     return 1;

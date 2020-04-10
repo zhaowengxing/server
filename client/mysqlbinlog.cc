@@ -78,7 +78,10 @@ DYNAMIC_ARRAY binlog_events; // Storing the events output string
 DYNAMIC_ARRAY events_in_stmt; // Storing the events that in one statement
 String stop_event_string; // Storing the STOP_EVENT output string
 
+EXTERN_C_START
 char server_version[SERVER_VERSION_LENGTH];
+EXTERN_C_END
+
 ulong server_id = 0;
 
 // needed by net_serv.c

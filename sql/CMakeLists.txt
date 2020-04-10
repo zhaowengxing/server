@@ -293,8 +293,9 @@ IF(MSVC)
   ENDIF()
   ADD_LIBRARY(server SHARED
     $<TARGET_OBJECTS:sql_builtins>
-    ${VERSIONINFO_DLL_RC}  
-   )
+    ${VERSIONINFO_DLL_RC}
+  )
+  MYSQL_INSTALL_TARGETS(server DESTINATION  ${INSTALL_BINDIR} COMPONENT Server)
   ADD_DEPENDENCIES(server gen_mysqld_lib)
   SET_TARGET_PROPERTIES(server PROPERTIES LINK_FLAGS \"${MYSQLD_EXP}\")
   target_link_libraries(server sql ${MYSQLD_STATIC_PLUGIN_LIBS} psapi)
